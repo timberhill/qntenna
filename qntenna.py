@@ -41,10 +41,17 @@ from timeit import default_timer as timer
 from os.path import join, exists
 from os import makedirs
 import argparse
+from datetime import datetime
 
 __version__ = 1.1
 
-def delta_integral(spectrumfile, w, lambda_0=None, delta_lambda=None, autosave=False, optimize=True, warning=True):
+
+def _print(*args):
+    print("[{}] ".format(datetime.now()), end="")
+    print(*args)
+
+
+def delta_integral(spectrumfile, w, lambda_0=None, delta_lambda=None, autosave=False, ncores=1, warning=True):
     '''
     Calculates the Delta^op value described in 'Quieting a noisy antenna reproduces
     photosynthetic light harvesting spectra' as a function of an input solar spectrum.
@@ -77,10 +84,8 @@ def delta_integral(spectrumfile, w, lambda_0=None, delta_lambda=None, autosave=F
             specified ranges include 2\sqrt(2)w (the theoretical optimum).
         autosave : If true will automatically save the output of the calculation to the
             local directory calculations.
-        optimize - If true (default) will use pathos.multiprocess to parallelize the
-            calculation on multiple processor cores, if False will limit the calculation
-            to a single processor.
-        warning - If true (default) will display a warning for excessively long spectrum files
+        ncores : Number of CPU cores to utilize.
+        warning : If true (default) will display a warning for excessively long spectrum files
 
     Returns:
         A tuple containing the calulated values and spectrum data, (calc_data, spectrum_data).
@@ -136,11 +141,8 @@ def delta_integral(spectrumfile, w, lambda_0=None, delta_lambda=None, autosave=F
         else:
             raise ValueError("parameter delta_lambda must be a numpy array, tuple or None")
 
-    print("Beginning calculations")
-    if optimize:
-        calc_data = _power_bandwidth_variance(spectral_data, l0, dl, w)
-    else:
-        calc_data = _power_bandwidth_variance(spectral_data, l0, dl, w, ncores=1)
+    _print("Beginning calculations")
+    calc_data = _power_bandwidth_variance(spectral_data, l0, dl, w, ncores=ncores)
 
     if autosave:
         save_calculation(calc_data, spectral_data)
@@ -205,7 +207,7 @@ def find_optimum_peaks(l0, dl, w, Delta, npeaks=2):
                 peaks[j][i, 2] = dl[ix0]
                 peaks[j][i, 3] = Delta[ix0, ix1, i]
         except IndexError:
-            print('Error at w= ' + str(w[i]))
+            _print('Error at w= ' + str(w[i]))
     return peaks
 # end find_optimum_peaks
 
@@ -235,8 +237,8 @@ def load_spectrum_data(spectrumfile, warn=True):
         helpstr = "Warning: Spectral data exceeding 1000 data points may take a long time to process. "
         helpstr += "If you are not okay with this we recommend using our preprocess_spectrum script "
         helpstr += "to reduce the file size. Use as follows: "
-        print(helpstr)
-        print("python preprocess_spectrum [PATH TO FILE] --reduce --savefile [NEW FILE]")
+        _print(helpstr)
+        _print("python preprocess_spectrum [PATH TO FILE] --reduce --savefile [NEW FILE]")
         if not _yes_or_no("Proceed anyway?"):
             exit()
     return spectral_data
@@ -298,7 +300,7 @@ def load_calculation(directory):
         if exists(join('calculations', directory)):
             directory = join('calculations', directory)
         else:
-            print('Error could not find ' + str(directory))
+            _print('Error could not find ' + str(directory))
             return
     l0 = np.loadtxt(join(directory, 'l0.txt'))
     dl = np.loadtxt(join(directory, 'dl.txt'))
@@ -347,7 +349,7 @@ def _multiprocess2D(func, args_array, ncores=4, display=True):
     else:
         disp_rows = np.arange(1, rows, 1)
     if display:
-        print("Parallel Processing Started with " + str(ncores) + " subprocesses")
+        _print("Parallel Processing Started with " + str(ncores) + " subprocesses")
     t0 = timer()
     for i in range(rows):
         worker_args = []
@@ -358,17 +360,17 @@ def _multiprocess2D(func, args_array, ncores=4, display=True):
             for j in range(cols):
                 output[i,j] = out[j]
             if display and i in disp_rows:
-                print(str(round(100*i/float(rows))) + "% Complete")
+                _print(str(round(100*i/float(rows))) + "% Complete")
         except Exception as e:
-            print("Exception in _multiprocessing2D: Cannot Process")
-            print("_multiprocessing2D: Exiting Process Early")
+            _print("Exception in _multiprocessing2D: Cannot Process")
+            _print("_multiprocessing2D: Exiting Process Early")
             pool.terminate()
             raise e
     tf = timer()
     if display:
-        print(" ")
+        _print(" ")
         dt = tf-t0
-        print("Computations Completed in: " + str(datetime.timedelta(seconds=dt)))
+        _print("Computations Completed in: " + str(datetime.timedelta(seconds=dt)))
     return output
 #
 
@@ -506,9 +508,9 @@ def _power_bandwidth_variance(spectral_data, l0, dl, w, ncores=8):
             for jj in range(cols):
                 du[ii,jj,i] = np.abs(ua[ii,jj,i] - ub[ii,jj,i])
         tf = timer()
-        print(str(i+1)+'/'+str(N)+' complete ' + str(datetime.timedelta(seconds=tf-ts)))
+        _print(str(i+1)+'/'+str(N)+' complete ' + str(datetime.timedelta(seconds=tf-ts)))
     Pool(nodes=ncores).clear() # Because pathos is designed to leave Pools running, and sometimes doesn't get rid of them after the caluculation is complete
-    print('Calculations Complete in ' + str(datetime.timedelta(seconds=tf-t0)))
+    _print('Calculations Complete in ' + str(datetime.timedelta(seconds=tf-t0)))
     return [l0, dl, w, du]
 #
 
@@ -565,7 +567,7 @@ def _yes_or_no(question):
             return True
         if reply[:1] == 'n':
             return False
-        print("invalid answer")
+        _print("invalid answer")
 # end _yes_or_no
 
 if __name__ == "__main__":
@@ -579,7 +581,7 @@ if __name__ == "__main__":
     parser.add_argument("-wn", "--wnumber", type=float, help='The number of points in the range in w from -w1 to -w2 (default 6)')
     parser.add_argument("-l1", "--lstart", type=float, help='The start of the range of center wavelength')
     parser.add_argument("-l2", "--lstop", type=float, help='The end of the range of center wavelength')
-    parser.add_argument("--limit", action="store_true", help="Limits calculation to a single processor core.")
+    parser.add_argument("-n", "--ncores", type=int, help="Limits calculation to a the number of processor cores specified.")
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppresses warning for long spectum files")
     args = parser.parse_args()
 
@@ -592,7 +594,7 @@ if __name__ == "__main__":
             if _yes_or_no(args.savefile + " does not exist. Create directory?"):
                 makedirs(args.savefile)
             else:
-                print("Invalid savefile, using default savefile")
+                _print("Invalid savefile, using default savefile")
                 autosave = True
     #
 
@@ -619,16 +621,14 @@ if __name__ == "__main__":
     if args.lstart is not None and args.lstop is not None:
         lambda0 = (args.lstart, args.lstop)
     elif (args.lstart is not None and args.lstop is None) or (args.lstop is not None and args.lstart is None):
-        print("user specified range of lambda_0 requires both --lstart and --lstop arguments")
-        print("Invalid arguments, exiting program")
+        _print("user specified range of lambda_0 requires both --lstart and --lstop arguments")
+        _print("Invalid arguments, exiting program")
         exit()
     else:
         lambda0 = None
 
-    optimize = not args.limit
-
     warn = not args.quiet
 
-    calc_data, spectrum = delta_integral(args.path, w, lambda_0=lambda0, autosave=autosave, optimize=optimize, warning=warn)
+    calc_data, spectrum = delta_integral(args.path, w, lambda_0=lambda0, autosave=autosave, ncores=args.ncores, warning=warn)
     if not autosave:
         save_calculation(calc_data, spectrum, directory=args.savefile)

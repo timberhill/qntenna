@@ -41,13 +41,12 @@ from timeit import default_timer as timer
 from os.path import join, exists
 from os import makedirs
 import argparse
-from datetime import datetime
 
 __version__ = 1.1
 
 
 def _print(*args):
-    print("[{}] ".format(datetime.now()), end="")
+    print("[{}] ".format(datetime.datetime.now()), end="")
     print(*args)
 
 

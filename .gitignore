@@ -1,3 +1,5 @@
+.vscode/
+
 calculations
 __pycache__
 *.zip
